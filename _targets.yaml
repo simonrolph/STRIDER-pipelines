@@ -1,0 +1,6 @@
+pipeline_dynamic:
+  store: targets_dynamic_branching
+  script: targets_dynamic_branching.R
+pipeline_static:
+  store: targets_static_branching
+  script: targets_static_branching.R

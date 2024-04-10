@@ -11,7 +11,7 @@ library(STRIDER) #see https://github.com/BiologicalRecordsCentre/STRIDER for mor
 parameters_state <- expand.grid(
   filename_bg = "rasters/background.tif",
   filename_se = "rasters/state_env.tif",
-  from = 0,
+  from = 1,
   to = 10,
   filename_sts = "rasters/state_target_suit.tif",
   filename_str = "rasters/state_target_realised.tif",
@@ -30,27 +30,34 @@ if (is.null(parameters_state$name)){
 
 #SAMPLING TYPE1
 #effort
-values_effort_citsci <- expand.grid(n_samplers = c(10, 30, 100),
-                             n_visits = c(10),
-                             n_sample_units = c(1))
+values_effort_citsci <- expand.grid(
+  funct = "uniform",
+  n_samplers = c(10, 30, 100),
+  n_visits = c(10),
+  n_sample_units = c(1),
+  stringsAsFactors = F)
 
 #detection
-values_detect_citsci <- expand.grid(prob = c(0.3, 0.7))
+values_detect_citsci <- expand.grid(
+  funct="equal",
+  prob = c(0.3, 0.7),
+  stringsAsFactors = F
+  )
 
 #reporting
-values_report_citsci <- expand.grid(prob = c(0.8, 1))
+values_report_citsci <- expand.grid(
+  funct="equal",
+  prob = c(0.8, 1),
+  stringsAsFactors = F
+  )
 
 
-#SAMPLING TYPE2
-values_effort_ami <- expand.grid(n_samplers = c(1, 3, 10),
-                                    n_visits = 1,
-                                    n_sample_units = c(50,100))
 
-#detection
-values_detect_ami <- expand.grid(prob = c(0.3, 0.7,1))
 
-#reporting
-values_report_ami <- expand.grid(prob = c(0.8, 1))
+
+### PIPELINE
+
+
 
 
 
@@ -61,33 +68,44 @@ values_report_ami <- expand.grid(prob = c(0.8, 1))
 
 # nested tar_map approach
 list(
+  # background
+  tar_target(
+    background,
+    write_raster_return_filename(x = terra::rast(matrix(0, 1000, 1000)), filename =  parameters_state$filename_bg),
+    format = "file"
+  ),
+  tar_target("so_background", SimulationObject(background = background)),
+
   #STATE
   tar_map(
     values = parameters_state,
     names = name,
 
     tar_target(
-      background,
-      write_raster_return_filename(x = terra::rast(matrix(0, 1000, 1000)), filename =  filename_bg),
-      format = "file"
-    ),
-    tar_target("so_background", SimulationObject(background = background)),
-    tar_target(
-      "so_state_env",
-      sim_state_env_gradient(
+      so_state_env,
+      sim_state_env(
         so_background,
+        fun="gradient",
         filename = filename_se,
         from = from,
         to = to
       )
     ),
     tar_target(
-      "so_state_target_suit",
-      sim_state_target_suitability_uniform(so_state_env, filename = filename_sts, n_targets = 2)
+      so_state_target_suit,
+      sim_state_target_suitability(
+        so_state_env,
+        fun="uniform",
+        filename = filename_sts,
+        n_targets = 2)
     ),
     tar_target(
-      "so_state_target_realised",
-      sim_state_target_realise_threshold(so_state_target_suit, filename = filename_str)
+      so_state_target_realised,
+      sim_state_target_realise(
+        so_state_target_suit,
+        fun="threshold",
+        filename = filename_str,
+        threshold = 0.5)
     ),
 
 
@@ -96,9 +114,10 @@ list(
     tar_map(
       values = values_effort_citsci,
       tar_target(
-        "so_effort_citsci",
-        sim_effort_uniform(
+        so_effort_citsci,
+        sim_effort(
           so_state_target_realised,
+          fun=funct,
           n_samplers = n_samplers,
           n_visits = n_visits,
           n_sample_units = n_sample_units,
@@ -109,50 +128,34 @@ list(
       #detect
       tar_map(
         values = values_detect_citsci,
-        tar_target("so_detect_citsci", sim_detect_equal(so_effort_citsci, prob = prob)),
+        tar_target(
+          so_detect_citsci,
+          sim_detect(
+            so_effort_citsci,
+            fun=funct,
+            prob = prob)
+          ),
 
         #reporting
         tar_map(
           values = values_report_citsci,
-          tar_target("so_report_citsci", sim_report_equal(so_detect_citsci, prob = prob))#,
+          tar_target(
+            so_report_citsci,
+            sim_report(
+              so_detect_citsci,
+              fun=funct,
+              prob = prob)
+            ),
 
           #save output
-          # tar_target("so_output_citsci", saveRDS(so_report_citsci, file = paste0(
-          #   "data/", names(so_report), ".rds"
-          # )), format = "file")
-        )
-      )
-    ),
-
-
-    #SAMPLING 2
-    tar_map(
-      values = values_effort_ami,
-      tar_target(
-        "so_effort_ami",
-        sim_effort_uniform(
-          so_state_target_realised,
-          n_samplers = n_samplers,
-          n_visits = n_visits,
-          n_sample_units = n_sample_units,
-          replace = T
-        )
-      ),
-
-      #detect
-      tar_map(
-        values = values_detect_ami,
-        tar_target("so_detect_ami", sim_detect_equal(so_effort_ami, prob = prob)),
-
-        #reporting
-        tar_map(
-          values = values_report_ami,
-          tar_target("so_report_ami", sim_report_equal(so_detect_ami, prob = prob))#,
-
-          #save output
-          # tar_target("so_output_ami", saveRDS(so_report_ami, file = paste0(
-          #   "data/", names(so_report), ".rds"
-          # )), format = "file")
+          tar_target(
+            so_output_citsci,
+            saveRDS(
+              so_report_citsci,
+              file = paste0("data/output_", so_report_citsci@hash, ".rds")
+              ),
+            format = "file"
+          )
         )
       )
     )

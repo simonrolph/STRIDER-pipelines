@@ -13,7 +13,7 @@ library(STRIDER) #see https://github.com/BiologicalRecordsCentre/STRIDER for mor
 parameters_state <- expand.grid(
   filename_bg = "rasters/background.tif",
   filename_se = "rasters/state_env.tif",
-  from = 0,
+  from = 1,
   to = 10,
   filename_sts = "rasters/state_target_suit.tif",
   filename_str = "rasters/state_target_realised.tif",
@@ -70,8 +70,9 @@ list(
     #state-environment
     tar_target(
       "so_state_env",
-      sim_state_env_gradient(
+      sim_state_env(
         so_background,
+        fun="gradient",
         filename = filename_se,
         from = from,
         to = to
@@ -80,12 +81,12 @@ list(
     #state-target-suitability
     tar_target(
       "so_state_target_suit",
-      sim_state_target_suitability_uniform(so_state_env, filename = filename_sts, n_targets = 2)
+      sim_state_target_suitability(so_state_env,fun="uniform",filename = filename_sts, n_targets = 2)
     ),
     #state-target-realised
     tar_target(
       "so_state_target_realised",
-      sim_state_target_realise_threshold(so_state_target_suit, filename = filename_str)
+      sim_state_target_realise(so_state_target_suit,fun="threshold", filename = filename_str)
     ),
 
     #sampling 1
